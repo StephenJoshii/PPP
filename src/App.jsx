@@ -36,7 +36,6 @@ const auth = getAuth(app);
 // --- NEW FPL API CONFIGURATION ---
 const FPL_FIXTURES_URL = 'https://fantasy.premierleague.com/api/fixtures/';
 const FPL_TEAMS_URL = 'https://fantasy.premierleague.com/api/bootstrap-static/';
-// We are switching to a more reliable CORS proxy.
 const CORS_PROXY = 'https://corsproxy.io/?';
 
 
@@ -386,12 +385,13 @@ export default function App() {
                     formattedData[gameweek] = { fixtures: [], results: {}, deadline: '' };
                 }
 
-                formattedData[gameweek].deadline = fixture.kickoff_time;
-
+                // Add the fixture with its finished status
                 formattedData[gameweek].fixtures.push({
                     id: fixture.id,
                     homeTeam: teamMap[fixture.team_h],
                     awayTeam: teamMap[fixture.team_a],
+                    finished: fixture.finished, // Essential for our new logic
+                    kickoff_time: fixture.kickoff_time,
                 });
 
                 if (fixture.finished) {
@@ -401,7 +401,31 @@ export default function App() {
                     };
                 }
             });
+
+            // Set the deadline for each gameweek to be the first kickoff time
+            for (const gw in formattedData) {
+                formattedData[gw].fixtures.sort((a, b) => new Date(a.kickoff_time) - new Date(b.kickoff_time));
+                if (formattedData[gw].fixtures.length > 0) {
+                    formattedData[gw].deadline = formattedData[gw].fixtures[0].kickoff_time;
+                }
+            }
+            
+            // --- REVISED LOGIC TO FIND CURRENT GAMEWEEK ---
+            let currentGw = 1; 
+            const sortedGameweeks = Object.keys(formattedData).sort((a, b) => parseInt(a) - parseInt(b));
+
+            for (const gw of sortedGameweeks) {
+                const allFixturesFinished = formattedData[gw].fixtures.every(f => f.finished);
+                if (!allFixturesFinished) {
+                    currentGw = parseInt(gw);
+                    break;
+                }
+                currentGw = parseInt(gw);
+            }
+            
             setSeasonData(formattedData);
+            setSelectedGameweek(currentGw);
+
         } catch (error) {
             console.error("Error fetching season data from FPL API:", error);
         } finally {
