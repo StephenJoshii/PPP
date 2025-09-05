@@ -10,22 +10,13 @@ import {
 } from "firebase/auth";
 
 // --- START FIREBASE CONFIGURATION ---
-// This is required for the preview environment to work.
-// Please replace the placeholder values with your actual Firebase keys.
 const firebaseConfig = {
-
-apiKey: process.env.REACT_APP_API_KEY,
-
-authDomain: process.env.REACT_APP_AUTH_DOMAIN,
-
-projectId: process.env.REACT_APP_PROJECT_ID,
-
-storageBucket: process.env.REACT_APP_STORAGE_BUCKET,
-
-messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
-
-appId: process.env.REACT_APP_APP_ID
-
+  apiKey: process.env.REACT_APP_API_KEY,
+  authDomain: process.env.REACT_APP_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);
@@ -33,10 +24,11 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 // --- END FIREBASE CONFIGURATION ---
 
-// --- NEW FPL API CONFIGURATION ---
-const FPL_FIXTURES_URL = 'https://fantasy.premierleague.com/api/fixtures/';
-const FPL_TEAMS_URL = 'https://fantasy.premierleague.com/api/bootstrap-static/';
-const CORS_PROXY = 'https://corsproxy.io/?';
+// --- NEW BACKEND API URL ---
+// After deploying the /api folder to Vercel, you will get a URL.
+// You will paste that URL here, followed by /api
+// e.g., 'https://your-project-name.vercel.app/api'
+const BACKEND_API_URL = 'YOUR_VERCEL_DEPLOYMENT_URL_HERE/api';
 
 
 function calculatePoints(prediction, result) {
@@ -336,7 +328,7 @@ function MyPredictions({ user, setView, seasonData }) {
                                                 </div>
                                             );
                                         })}
-                                        {Object.keys(weeklyResults).length > 0 && <div className="text-right font-bold text-gray-300 mt-2">Gameweek Total: {weeklyTotal} pts</div>}
+                                        {Object.keys(weeklyResults || {}).length > 0 && <div className="text-right font-bold text-gray-300 mt-2">Gameweek Total: {weeklyTotal} pts</div>}
                                     </div>
                                 ) : (
                                     <div className="text-center text-gray-500 bg-gray-700 p-3 rounded-lg">No predictions submitted for this week.</div>
@@ -363,13 +355,12 @@ export default function App() {
     
     const fetchSeasonData = async () => {
         try {
-            const [fixturesRes, teamsRes] = await Promise.all([
-                fetch(CORS_PROXY + FPL_FIXTURES_URL),
-                fetch(CORS_PROXY + FPL_TEAMS_URL)
-            ]);
-
-            const fixturesData = await fixturesRes.json();
-            const teamsData = await teamsRes.json();
+            // This now calls our own secure backend. No more proxies!
+            const res = await fetch(BACKEND_API_URL);
+            if (!res.ok) {
+              throw new Error(`Backend function returned status ${res.status}`);
+            }
+            const { fixturesData, teamsData } = await res.json();
             
             const teamMap = {};
             teamsData.teams.forEach(team => {
@@ -385,14 +376,15 @@ export default function App() {
                     formattedData[gameweek] = { fixtures: [], results: {}, deadline: '' };
                 }
 
-                // Add the fixture with its finished status
-                formattedData[gameweek].fixtures.push({
+                const fixtureData = {
                     id: fixture.id,
                     homeTeam: teamMap[fixture.team_h],
                     awayTeam: teamMap[fixture.team_a],
-                    finished: fixture.finished, // Essential for our new logic
+                    finished: fixture.finished,
                     kickoff_time: fixture.kickoff_time,
-                });
+                };
+                
+                formattedData[gameweek].fixtures.push(fixtureData);
 
                 if (fixture.finished) {
                     formattedData[gameweek].results[fixture.id] = {
@@ -402,15 +394,12 @@ export default function App() {
                 }
             });
 
-            // Set the deadline for each gameweek to be the first kickoff time
             for (const gw in formattedData) {
-                formattedData[gw].fixtures.sort((a, b) => new Date(a.kickoff_time) - new Date(b.kickoff_time));
                 if (formattedData[gw].fixtures.length > 0) {
-                    formattedData[gw].deadline = formattedData[gw].fixtures[0].kickoff_time;
+                    formattedData[gw].deadline = formattedData[gw].fixtures.sort((a,b) => new Date(a.kickoff_time) - new Date(b.kickoff_time))[0].kickoff_time;
                 }
             }
             
-            // --- REVISED LOGIC TO FIND CURRENT GAMEWEEK ---
             let currentGw = 1; 
             const sortedGameweeks = Object.keys(formattedData).sort((a, b) => parseInt(a) - parseInt(b));
 
@@ -418,7 +407,7 @@ export default function App() {
                 const allFixturesFinished = formattedData[gw].fixtures.every(f => f.finished);
                 if (!allFixturesFinished) {
                     currentGw = parseInt(gw);
-                    break;
+                    break; 
                 }
                 currentGw = parseInt(gw);
             }
@@ -427,19 +416,26 @@ export default function App() {
             setSelectedGameweek(currentGw);
 
         } catch (error) {
-            console.error("Error fetching season data from FPL API:", error);
+            console.error("Error fetching season data from backend:", error);
         } finally {
             setIsDataLoading(false);
         }
     };
 
-    fetchSeasonData();
+    if (BACKEND_API_URL && BACKEND_API_URL !== 'YOUR_VERCEL_DEPLOYMENT_URL_HERE/api') {
+        fetchSeasonData();
+    } else {
+        setIsDataLoading(false);
+    }
     
     return () => unsubscribe();
   }, []);
 
   const renderContent = () => {
     if (isAuthLoading || isDataLoading) { return <div className="text-center text-gray-400">Loading Game Data...</div>; }
+    if (BACKEND_API_URL === 'YOUR_VERCEL_DEPLOYMENT_URL_HERE/api') {
+        return <div className="text-center text-red-400">Backend API URL is missing. Please deploy the /api folder to Vercel and add the URL to the App.jsx file.</div>
+    }
     if (user) {
         if (view === 'predictor') { return <Predictor user={user} setView={setView} selectedGameweek={selectedGameweek} setSelectedGameweek={setSelectedGameweek} seasonData={seasonData} />; }
         if (view === 'leaderboard') { return <Leaderboard user={user} setView={setView} selectedGameweek={selectedGameweek} setSelectedGameweek={setSelectedGameweek} seasonData={seasonData} />; }

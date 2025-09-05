@@ -1,0 +1,16 @@
+    {
+      "name": "ppp-api-backend",
+      "version": "1.0.0",
+      "description": "Backend proxy for Premier League Predictor",
+      "main": "index.js",
+      "scripts": {
+        "start": "node index.js"
+      },
+      "dependencies": {
+        "cors": "^2.8.5",
+        "express": "^4.19.2",
+        "node-fetch": "^2.7.0"
+      }
+    }
+    
+
