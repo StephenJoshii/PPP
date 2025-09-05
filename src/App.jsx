@@ -22,13 +22,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-// --- END FIREBASE CONFIGURATION ---
 
-// --- NEW BACKEND API URL ---
-// After deploying the /api folder to Vercel, you will get a URL.
-// You will paste that URL here, followed by /api
-// e.g., 'https://your-project-name.vercel.app/api'
-const BACKEND_API_URL = 'YOUR_VERCEL_DEPLOYMENT_URL_HERE/api';
+const BACKEND_API_URL = '/api';
 
 
 function calculatePoints(prediction, result) {
